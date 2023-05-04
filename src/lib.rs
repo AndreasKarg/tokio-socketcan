@@ -41,13 +41,13 @@ use mio::{event, unix::SourceFd, Interest, Registry, Token};
 
 use thiserror::Error as ThisError;
 
-pub use socketcan::{CanFilter, CanFrame, CanSocketOpenError, Socket};
+pub use socketcan::{CanFilter, CanFrame, Socket, CanError};
 use tokio::io::unix::AsyncFd;
 
 #[derive(Debug, ThisError)]
 pub enum Error {
     #[error("Failed to open CAN Socket")]
-    CANSocketOpen(#[from] socketcan::CanSocketOpenError),
+    Can(#[from] CanError),
     #[error("IO error")]
     IO(#[from] io::Error),
 }
@@ -236,6 +236,7 @@ mod tests {
 
     use std::io;
     use std::time::Duration;
+    use socketcan::{EmbeddedFrame, Id, StandardId};
 
     /// Receive a frame from the CANSocket
     async fn recv_frame(mut socket: CANSocket) -> io::Result<CANSocket> {
@@ -249,7 +250,7 @@ mod tests {
 
     /// Write a test frame to the CANSocket
     async fn write_frame(socket: &CANSocket) -> Result<(), Error> {
-        let test_frame = socketcan::CANFrame::new(0x1, &[0], false, false).unwrap();
+        let test_frame = socketcan::CanFrame::new(StandardId::new(0x1).unwrap(), &[0]).unwrap();
         socket.write_frame(test_frame)?.await?;
         Ok(())
     }
@@ -280,16 +281,16 @@ mod tests {
         let socket1 = CANSocket::open("vcan0").unwrap();
         let socket2 = CANSocket::open("vcan0").unwrap();
 
-        let frame_id_1 = CANFrame::new(1, &[0u8], false, false).unwrap();
-        let frame_id_2 = CANFrame::new(2, &[0u8], false, false).unwrap();
-        let frame_id_3 = CANFrame::new(3, &[0u8], false, false).unwrap();
+        let frame_id_1 = CanFrame::new(StandardId::new(1).unwrap(), &[0u8]).unwrap();
+        let frame_id_2 = CanFrame::new(StandardId::new(2).unwrap(), &[0u8]).unwrap();
+        let frame_id_3 = CanFrame::new(StandardId::new(3).unwrap(), &[0u8]).unwrap();
 
         let (mut sink, _stream) = socket1.split();
         let (_sink, stream) = socket2.split();
 
         let count_ids_less_than_3 = stream
             .map(|x| x.unwrap())
-            .take_while(|frame| future::ready(frame.id() < 3))
+            .take_while(|frame| future::ready(frame.id() < Id::Standard(StandardId::new(3).unwrap())))
             .fold(0u8, |acc, _frame| async move { acc + 1 });
 
         let send_frames = async {

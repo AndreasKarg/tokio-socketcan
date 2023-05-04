@@ -2,7 +2,7 @@ use futures_timer::Delay;
 use std::time::Duration;
 use tokio;
 use tokio_socketcan::{CanFrame, CANSocket, Error};
-use embedded_hal::can::{Frame, Id, StandardId};
+use socketcan::{EmbeddedFrame, StandardId};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
