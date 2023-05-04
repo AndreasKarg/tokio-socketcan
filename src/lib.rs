@@ -41,7 +41,9 @@ use mio::{event, unix::SourceFd, Interest, Registry, Token};
 
 use thiserror::Error as ThisError;
 
-pub use socketcan::{CanFilter, CanFrame, Frame, Socket, CanError, StandardId, ExtendedId, Id};
+pub use socketcan::{CanFilter, CanFrame, Socket, CanError, StandardId, ExtendedId, Id};
+use socketcan::embedded_can;
+pub use embedded_can::Frame;
 use tokio::io::unix::AsyncFd;
 
 #[derive(Debug, ThisError)]
