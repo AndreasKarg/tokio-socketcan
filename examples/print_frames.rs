@@ -1,10 +1,10 @@
 use futures_util::StreamExt;
 use tokio;
-use tokio_socketcan::CANSocket;
+use tokio_socketcan::CanSocket;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let mut socket_rx = CANSocket::open("vcan0").unwrap();
+    let mut socket_rx = CanSocket::open("vcan0").unwrap();
 
     println!("Reading on vcan0");
 

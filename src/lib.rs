@@ -13,12 +13,12 @@
 //!
 //! ```no_run
 //! use futures_util::stream::StreamExt;
-//! use tokio_socketcan::{CANSocket, Error};
+//! use tokio_socketcan::{CanSocket, Error};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Error> {
-//!     let mut socket_rx = CANSocket::open("vcan0")?;
-//!     let socket_tx = CANSocket::open("vcan0")?;
+//!     let mut socket_rx = CanSocket::open("vcan0")?;
+//!     let socket_tx = CanSocket::open("vcan0")?;
 //!
 //!     while let Some(Ok(frame)) = socket_rx.next().await {
 //!         socket_tx.write_frame(frame)?.await;
@@ -55,13 +55,13 @@ pub enum Error {
 /// A Future representing the eventual
 /// writing of a CANFrame to the socket
 ///
-/// Created by the CANSocket.write_frame() method
-pub struct CANWriteFuture {
-    socket: CANSocket,
+/// Created by the CanSocket.write_frame() method
+pub struct CanWriteFuture {
+    socket: CanSocket,
     frame: CanFrame,
 }
 
-impl Future for CANWriteFuture {
+impl Future for CanWriteFuture {
     type Output = io::Result<()>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -73,24 +73,24 @@ impl Future for CANWriteFuture {
     }
 }
 
-/// A socketcan::CANSocket wrapped for mio eventing
+/// A socketcan::CanSocket wrapped for mio eventing
 /// to allow it be integrated in turn into tokio
 #[derive(Debug)]
-pub struct EventedCANSocket(socketcan::CanSocket);
+pub struct EventedCanSocket(socketcan::CanSocket);
 
-impl EventedCANSocket {
+impl EventedCanSocket {
     fn get_ref(&self) -> &socketcan::CanSocket {
         &self.0
     }
 }
 
-impl AsRawFd for EventedCANSocket {
+impl AsRawFd for EventedCanSocket {
     fn as_raw_fd(&self) -> RawFd {
         self.0.as_raw_fd()
     }
 }
 
-impl event::Source for EventedCANSocket {
+impl event::Source for EventedCanSocket {
     fn register(
         &mut self,
         registry: &Registry,
@@ -114,23 +114,23 @@ impl event::Source for EventedCANSocket {
     }
 }
 
-/// An asynchronous I/O wrapped socketcan::CANSocket
+/// An asynchronous I/O wrapped socketcan::CanSocket
 #[derive(Debug)]
-pub struct CANSocket(AsyncFd<EventedCANSocket>);
+pub struct CanSocket(AsyncFd<EventedCanSocket>);
 
-impl CANSocket {
+impl CanSocket {
     /// Open a named CAN device such as "vcan0"
-    pub fn open(ifname: &str) -> Result<CANSocket, Error> {
+    pub fn open(ifname: &str) -> Result<CanSocket, Error> {
         let sock = socketcan::CanSocket::open(ifname)?;
         sock.set_nonblocking(true)?;
-        Ok(CANSocket(AsyncFd::new(EventedCANSocket(sock))?))
+        Ok(CanSocket(AsyncFd::new(EventedCanSocket(sock))?))
     }
 
     /// Open CAN device by kernel interface number
-    pub fn open_if(if_index: c_uint) -> Result<CANSocket, Error> {
+    pub fn open_if(if_index: c_uint) -> Result<CanSocket, Error> {
         let sock = socketcan::CanSocket::open_iface(if_index)?;
         sock.set_nonblocking(true)?;
-        Ok(CANSocket(AsyncFd::new(EventedCANSocket(sock))?))
+        Ok(CanSocket(AsyncFd::new(EventedCanSocket(sock))?))
     }
 
     /// Sets the filter mask on the socket
@@ -164,14 +164,14 @@ impl CANSocket {
     ///
     /// This uses the semantics of socketcan's `write_frame_insist`,
     /// IE: it will automatically retry when it fails on an EINTR
-    pub fn write_frame(&self, frame: CanFrame) -> Result<CANWriteFuture, Error> {
-        Ok(CANWriteFuture {
+    pub fn write_frame(&self, frame: CanFrame) -> Result<CanWriteFuture, Error> {
+        Ok(CanWriteFuture {
             socket: self.try_clone()?,
             frame,
         })
     }
 
-    /// Clone the CANSocket by using the `dup` syscall to get another
+    /// Clone the CanSocket by using the `dup` syscall to get another
     /// file descriptor. This method makes clones fairly cheap and
     /// avoids complexity around ownership
     fn try_clone(&self) -> Result<Self, Error> {
@@ -185,12 +185,12 @@ impl CANSocket {
             // the socket as a whole isn't going to be closed.
             let new_fd = libc::dup(fd);
             let new = socketcan::CanSocket::from_raw_fd(new_fd);
-            Ok(CANSocket(AsyncFd::new(EventedCANSocket(new))?))
+            Ok(CanSocket(AsyncFd::new(EventedCanSocket(new))?))
         }
     }
 }
 
-impl Stream for CANSocket {
+impl Stream for CanSocket {
     type Item = io::Result<CanFrame>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
@@ -204,7 +204,7 @@ impl Stream for CANSocket {
     }
 }
 
-impl Sink<CanFrame> for CANSocket {
+impl Sink<CanFrame> for CanSocket {
     type Error = io::Error;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -238,8 +238,8 @@ mod tests {
     use std::time::Duration;
     use socketcan::{EmbeddedFrame, Id, StandardId};
 
-    /// Receive a frame from the CANSocket
-    async fn recv_frame(mut socket: CANSocket) -> io::Result<CANSocket> {
+    /// Receive a frame from the CanSocket
+    async fn recv_frame(mut socket: CanSocket) -> io::Result<CanSocket> {
         // let mut frame_stream = socket;
 
         select!(
@@ -248,8 +248,8 @@ mod tests {
         )
     }
 
-    /// Write a test frame to the CANSocket
-    async fn write_frame(socket: &CANSocket) -> Result<(), Error> {
+    /// Write a test frame to the CanSocket
+    async fn write_frame(socket: &CanSocket) -> Result<(), Error> {
         let test_frame = socketcan::CanFrame::new(StandardId::new(0x1).unwrap(), &[0]).unwrap();
         socket.write_frame(test_frame)?.await?;
         Ok(())
@@ -260,8 +260,8 @@ mod tests {
     /// waiting for CAN reads is not blocking.
     #[tokio::test]
     async fn test_receive() -> Result<(), Error> {
-        let socket1 = CANSocket::open("vcan0").unwrap();
-        let socket2 = CANSocket::open("vcan0").unwrap();
+        let socket1 = CanSocket::open("vcan0").unwrap();
+        let socket2 = CanSocket::open("vcan0").unwrap();
 
         let send_frames = future::try_join(write_frame(&socket1), write_frame(&socket1));
 
@@ -278,8 +278,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_sink_stream() -> io::Result<()> {
-        let socket1 = CANSocket::open("vcan0").unwrap();
-        let socket2 = CANSocket::open("vcan0").unwrap();
+        let socket1 = CanSocket::open("vcan0").unwrap();
+        let socket2 = CanSocket::open("vcan0").unwrap();
 
         let frame_id_1 = CanFrame::new(StandardId::new(1).unwrap(), &[0u8]).unwrap();
         let frame_id_2 = CanFrame::new(StandardId::new(2).unwrap(), &[0u8]).unwrap();

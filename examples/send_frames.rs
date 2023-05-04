@@ -1,12 +1,12 @@
 use futures_timer::Delay;
 use std::time::Duration;
 use tokio;
-use tokio_socketcan::{CanFrame, CANSocket, Error};
+use tokio_socketcan::{CanFrame, CanSocket, Error};
 use socketcan::{EmbeddedFrame, StandardId};
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
-    let socket_tx = CANSocket::open("vcan0").unwrap();
+    let socket_tx = CanSocket::open("vcan0").unwrap();
 
     loop {
         let id = StandardId::new(0x1).unwrap();
